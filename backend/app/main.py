@@ -5,13 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 
 from app import __version__
-from app.api.routes import health
+from app.api.routes import auth, health
 from app.config import settings
+from app.core.redis import close_redis
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
+    await close_redis()
 
 
 def create_app() -> FastAPI:
@@ -33,6 +35,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router, prefix=settings.api_v1_prefix)
+    app.include_router(auth.router, prefix=settings.api_v1_prefix)
 
     return app
 
