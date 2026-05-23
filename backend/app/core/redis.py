@@ -7,10 +7,17 @@ from app.config import settings
 _redis: Redis | None = None
 
 
+def _clean(url: str) -> str:
+    return (url or "").strip().strip('"').strip("'")
+
+
 def get_redis() -> Redis:
     global _redis
     if _redis is None:
-        _redis = from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+        url = _clean(settings.redis_url)
+        if not url:
+            raise RuntimeError("REDIS_URL is not configured")
+        _redis = from_url(url, encoding="utf-8", decode_responses=True)
     return _redis
 
 
