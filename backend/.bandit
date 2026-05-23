@@ -1,0 +1,4 @@
+[bandit]
+exclude = /tests,/alembic/versions
+# B101 assert_used: pytest assertions; B104 hardcoded_bind: dev binds 0.0.0.0
+skips = B101,B104
