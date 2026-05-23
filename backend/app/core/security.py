@@ -22,16 +22,20 @@ def verify_password(password: str, password_hash: str) -> bool:
     return _pwd.verify(password, password_hash)
 
 
-def _load_key(path) -> str:
+def _materialize(env_value: str, path) -> str:
+    """Prefer the env-supplied PEM; fall back to disk."""
+    if env_value:
+        # Allow newlines passed as literal '\n' (common in PaaS env editors).
+        return env_value.replace("\\n", "\n")
     return path.read_text()
 
 
 def _private_key() -> str:
-    return _load_key(settings.jwt_private_key_path)
+    return _materialize(settings.jwt_private_key, settings.jwt_private_key_path)
 
 
 def _public_key() -> str:
-    return _load_key(settings.jwt_public_key_path)
+    return _materialize(settings.jwt_public_key, settings.jwt_public_key_path)
 
 
 TokenType = Literal["access", "refresh"]

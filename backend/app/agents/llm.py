@@ -9,13 +9,26 @@ from app.config import settings
 
 
 def chat_model(temperature: float = 0.2) -> ChatOpenAI:
-    return ChatOpenAI(
-        model=settings.openai_model,
-        temperature=temperature,
-        api_key=settings.openai_api_key,
-        timeout=60,
-        max_retries=2,
-    )
+    """Build a chat model client.
+
+    Provider is whatever exposes an OpenAI-compatible /v1/chat/completions:
+    - openai (default)
+    - groq    -> https://api.groq.com/openai/v1, free Llama 3.3 70B
+    - custom  -> set LLM_BASE_URL yourself
+
+    Falls back to OpenAI defaults if specific LLM_* vars aren't set.
+    """
+    kwargs: dict[str, Any] = {
+        "model": settings.resolved_llm_model,
+        "temperature": temperature,
+        "api_key": settings.resolved_llm_api_key,
+        "timeout": 60,
+        "max_retries": 2,
+    }
+    base_url = settings.resolved_llm_base_url
+    if base_url:
+        kwargs["base_url"] = base_url
+    return ChatOpenAI(**kwargs)
 
 
 async def call_json(

@@ -49,6 +49,10 @@ GET    /api/v1/sessions
 GET    /api/v1/sessions/{id}
 ```
 
+## Deploy free
+
+Full walkthrough in [`DEPLOY.md`](./DEPLOY.md). TL;DR — Vercel (frontend) + Render (backend) + Neon (Postgres) + Upstash (Redis) + Groq (LLM) all on free tiers, total cost $0/month, no LLM token spend.
+
 ## Quick start (Docker)
 
 ```bash

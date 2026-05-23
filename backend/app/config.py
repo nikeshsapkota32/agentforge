@@ -29,13 +29,31 @@ class Settings(BaseSettings):
 
     jwt_private_key_path: Path = Path("keys/jwt_private.pem")
     jwt_public_key_path: Path = Path("keys/jwt_public.pem")
+    # Alternatively, supply the PEM content directly (useful on ephemeral hosts).
+    jwt_private_key: str = ""
+    jwt_public_key: str = ""
     jwt_algorithm: str = "RS256"
     access_token_ttl_seconds: int = 60 * 15
     refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
 
+    # LLM provider — OpenAI-compatible.
+    # Free: Groq (Llama 3.3 70B) at https://api.groq.com/openai/v1
+    # Paid: OpenAI default
+    llm_provider: str = "openai"  # "openai" | "groq" | "custom"
+    llm_base_url: str = ""  # blank = SDK default; set for Groq/custom
+    llm_api_key: str = ""  # if blank, falls back to openai_api_key
+    llm_model: str = ""  # if blank, picked from provider preset
+
+    # Legacy / fallback (kept so existing .env files keep working)
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
     openai_embedding_model: str = "text-embedding-3-large"
+
+    # Embeddings provider — separate from chat. Optional.
+    embeddings_provider: str = "openai"  # "openai" | "disabled"
+    embeddings_api_key: str = ""  # falls back to openai_api_key
+    embeddings_base_url: str = ""
+    embeddings_model: str = ""  # blank = openai_embedding_model
 
     pinecone_api_key: str = ""
     pinecone_index: str = "agentforge"
@@ -53,6 +71,41 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
+
+    @property
+    def resolved_llm_api_key(self) -> str:
+        return self.llm_api_key or self.openai_api_key
+
+    @property
+    def resolved_llm_base_url(self) -> str | None:
+        if self.llm_base_url:
+            return self.llm_base_url
+        if self.llm_provider == "groq":
+            return "https://api.groq.com/openai/v1"
+        return None
+
+    @property
+    def resolved_llm_model(self) -> str:
+        if self.llm_model:
+            return self.llm_model
+        if self.llm_provider == "groq":
+            return "llama-3.3-70b-versatile"
+        return self.openai_model
+
+    @property
+    def resolved_embeddings_api_key(self) -> str:
+        return self.embeddings_api_key or self.openai_api_key
+
+    @property
+    def resolved_embeddings_model(self) -> str:
+        return self.embeddings_model or self.openai_embedding_model
+
+    @property
+    def embeddings_enabled(self) -> bool:
+        return (
+            self.embeddings_provider != "disabled"
+            and bool(self.resolved_embeddings_api_key)
+        )
 
 
 @lru_cache
