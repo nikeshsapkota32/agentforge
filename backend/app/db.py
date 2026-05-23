@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -5,6 +9,13 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
+
+log = logging.getLogger(__name__)
+
+
+def _mask(url: str) -> str:
+    """Return a copy of the URL with the password redacted."""
+    return re.sub(r"(://[^:/?#]+:)[^@]*(@)", r"\1***\2", url or "")
 
 
 def _normalize_db_url(raw: str) -> tuple[str, dict]:
@@ -23,6 +34,8 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
     if not raw:
         return raw, {}
 
+    raw = raw.strip().strip('"').strip("'")
+
     # Collapse accidental double-?, which would otherwise leak '?' into a
     # query-string key name and trigger configparser interpolation later.
     while "??" in raw:
@@ -33,6 +46,11 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
     if scheme == "postgresql" or scheme == "postgres":
         scheme = "postgresql+asyncpg"
 
+    if not parts.netloc:
+        raise ValueError(
+            f"DATABASE_URL is missing the host part. Got: {_mask(raw)!r}"
+        )
+
     # Some PaaS env editors lose the path. asyncpg needs at least /<db>.
     path = parts.path or "/postgres"
 
@@ -42,7 +60,6 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
         # Tolerate accidentally-included leading punctuation like "?ssl".
         key = k.strip().lstrip("?&").lower()
         if key == "sslmode":
-            # libpq style; asyncpg uses `ssl` kwarg instead.
             if v.lower() in ("require", "verify-ca", "verify-full"):
                 connect_args["ssl"] = True
             continue
@@ -61,6 +78,19 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
 
 
 _clean_url, _connect_args = _normalize_db_url(settings.database_url)
+
+if not _clean_url:
+    raise RuntimeError(
+        "DATABASE_URL is empty. Set it in your environment to a Postgres "
+        "connection string, e.g. "
+        "postgresql+asyncpg://user:pass@host/dbname?ssl=require"
+    )
+
+log.info(
+    "Connecting to database %s (ssl=%s)",
+    _mask(_clean_url),
+    _connect_args.get("ssl", "default"),
+)
 
 engine = create_async_engine(
     _clean_url,
