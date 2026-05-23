@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     max_critic_loops: int = 2
     min_passing_score: int = 7
 
+    # Comma-separated free-tier OpenRouter model slugs to try in order
+    # if the primary LLM_MODEL returns 429.
+    llm_fallback_models: str = (
+        "deepseek/deepseek-chat-v3-0324:free,"
+        "qwen/qwen-2.5-72b-instruct:free,"
+        "google/gemini-2.0-flash-exp:free,"
+        "mistralai/mistral-small-3.1-24b-instruct:free"
+    )
+
+    @property
+    def llm_fallback_list(self) -> list[str]:
+        return [m.strip() for m in self.llm_fallback_models.split(",") if m.strip()]
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

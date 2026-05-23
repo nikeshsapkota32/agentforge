@@ -1,25 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from typing import Any
 
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
 
+log = logging.getLogger(__name__)
 
-def chat_model(temperature: float = 0.2) -> ChatOpenAI:
+
+def chat_model(temperature: float = 0.2, model: str | None = None) -> ChatOpenAI:
     """Build a chat model client.
 
     Provider is whatever exposes an OpenAI-compatible /v1/chat/completions:
-    - openai (default)
-    - groq    -> https://api.groq.com/openai/v1, free Llama 3.3 70B
-    - custom  -> set LLM_BASE_URL yourself
-
-    Falls back to OpenAI defaults if specific LLM_* vars aren't set.
+    - openrouter (default free)
+    - openai, groq, cerebras, gemini, custom
     """
     kwargs: dict[str, Any] = {
-        "model": settings.resolved_llm_model,
+        "model": model or settings.resolved_llm_model,
         "temperature": temperature,
         "api_key": settings.resolved_llm_api_key,
         "timeout": 60,
@@ -34,25 +35,69 @@ def chat_model(temperature: float = 0.2) -> ChatOpenAI:
     return ChatOpenAI(**kwargs)
 
 
+def _is_rate_limit(err: BaseException) -> bool:
+    msg = str(err).lower()
+    return "429" in msg or "rate" in msg or "rate_limit" in msg or "rate-limit" in msg
+
+
+async def _invoke_once(
+    model: str,
+    system: str,
+    user: str,
+    temperature: float,
+) -> Any:
+    llm = chat_model(temperature=temperature, model=model).bind(
+        response_format={"type": "json_object"}
+    )
+    return await llm.ainvoke(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+    )
+
+
 async def call_json(
     system: str,
     user: str,
     *,
     temperature: float = 0.2,
 ) -> tuple[dict[str, Any], int, int]:
-    """Call the LLM with response_format=json_object and return (parsed, tokens_in, tokens_out)."""
-    llm = chat_model(temperature=temperature).bind(response_format={"type": "json_object"})
-    msg = await llm.ainvoke(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ]
+    """
+    Call the LLM with response_format=json_object.
+
+    Strategy:
+      1. Try the configured primary model.
+      2. On rate-limit (429), fall back to each model in LLM_FALLBACK_MODELS
+         in order, with a small backoff between attempts.
+
+    Returns (parsed_json, tokens_in, tokens_out).
+    """
+    primary = settings.resolved_llm_model
+    fallbacks = [m for m in settings.llm_fallback_list if m != primary]
+    candidates = [primary, *fallbacks]
+
+    last_err: BaseException | None = None
+    for i, model in enumerate(candidates):
+        try:
+            msg = await _invoke_once(model, system, user, temperature)
+            usage = getattr(msg, "usage_metadata", None) or {}
+            tokens_in = int(usage.get("input_tokens", 0))
+            tokens_out = int(usage.get("output_tokens", 0))
+            try:
+                parsed = json.loads(msg.content or "{}")
+            except json.JSONDecodeError:
+                parsed = {"_raw": msg.content}
+            if i > 0:
+                log.info("llm fallback hit: served by %s after %d retries", model, i)
+            return parsed, tokens_in, tokens_out
+        except BaseException as err:
+            last_err = err
+            if not _is_rate_limit(err):
+                raise
+            log.warning("llm 429 on %s; trying next fallback", model)
+            await asyncio.sleep(min(2 + i, 6))
+
+    raise RuntimeError(
+        f"All LLM candidates rate-limited. Tried: {candidates}. Last error: {last_err}"
     )
-    usage = getattr(msg, "usage_metadata", None) or {}
-    tokens_in = int(usage.get("input_tokens", 0))
-    tokens_out = int(usage.get("output_tokens", 0))
-    try:
-        parsed = json.loads(msg.content or "{}")
-    except json.JSONDecodeError:
-        parsed = {"_raw": msg.content}
-    return parsed, tokens_in, tokens_out
