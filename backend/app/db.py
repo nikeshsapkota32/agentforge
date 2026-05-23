@@ -109,6 +109,15 @@ SessionLocal = async_sessionmaker(
 )
 
 
+async def init_db() -> None:
+    """Create any missing tables. Safe to call on every boot — create_all is idempotent."""
+    from app.models import Base  # imported here to avoid circular import at module load
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    log.info("init_db: schema verified")
+
+
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         try:

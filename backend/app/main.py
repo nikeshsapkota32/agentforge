@@ -10,12 +10,14 @@ from app.config import settings
 from app.core.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.core.observability import configure_observability
 from app.core.redis import close_redis
+from app.db import init_db
 
 configure_observability()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    await init_db()
     yield
     await close_redis()
 
