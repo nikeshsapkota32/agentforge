@@ -7,7 +7,10 @@ from fastapi.responses import ORJSONResponse
 from app import __version__
 from app.api.routes import auth, health, research, sessions
 from app.config import settings
+from app.core.observability import configure_observability
 from app.core.redis import close_redis
+
+configure_observability()
 
 
 @asynccontextmanager
