@@ -4,25 +4,27 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import settings
 from app.db import _normalize_db_url
 from app.models import Base
 
 config = context.config
-_clean_url, _connect_args = _normalize_db_url(settings.database_url)
-config.set_main_option("sqlalchemy.url", _clean_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 
+# Sanitize once. URL never goes through configparser (it interprets %),
+# so we keep it on the side and feed engines directly.
+_CLEAN_URL, _CONNECT_ARGS = _normalize_db_url(settings.database_url)
+
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=_CLEAN_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -43,11 +45,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_async_engine(
+        _CLEAN_URL,
         poolclass=pool.NullPool,
-        connect_args=_connect_args,
+        connect_args=_CONNECT_ARGS,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

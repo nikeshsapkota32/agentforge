@@ -23,6 +23,11 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
     if not raw:
         return raw, {}
 
+    # Collapse accidental double-?, which would otherwise leak '?' into a
+    # query-string key name and trigger configparser interpolation later.
+    while "??" in raw:
+        raw = raw.replace("??", "?")
+
     parts = urlsplit(raw)
     scheme = parts.scheme or "postgresql"
     if scheme == "postgresql" or scheme == "postgres":
@@ -34,7 +39,8 @@ def _normalize_db_url(raw: str) -> tuple[str, dict]:
     connect_args: dict = {}
     new_qs: list[tuple[str, str]] = []
     for k, v in parse_qsl(parts.query, keep_blank_values=False):
-        key = k.strip().lower()
+        # Tolerate accidentally-included leading punctuation like "?ssl".
+        key = k.strip().lstrip("?&").lower()
         if key == "sslmode":
             # libpq style; asyncpg uses `ssl` kwarg instead.
             if v.lower() in ("require", "verify-ca", "verify-full"):
