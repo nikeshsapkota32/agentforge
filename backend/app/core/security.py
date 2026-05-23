@@ -13,13 +13,23 @@ from app.config import settings
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# bcrypt only consumes the first 72 bytes of input. Newer libs raise on
+# anything longer instead of silently truncating; we clip ourselves to stay
+# compatible with both behaviors and to make hashing deterministic.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _clip_password(password: str) -> str:
+    encoded = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return encoded.decode("utf-8", errors="ignore")
+
 
 def hash_password(password: str) -> str:
-    return _pwd.hash(password)
+    return _pwd.hash(_clip_password(password))
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return _pwd.verify(password, password_hash)
+    return _pwd.verify(_clip_password(password), password_hash)
 
 
 def _materialize(env_value: str, path) -> str:
