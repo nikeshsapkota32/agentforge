@@ -17,7 +17,6 @@ from app.core.security import (
 )
 from app.models import RefreshTokenRow, UserRow
 from app.schemas.auth import (
-    AccessTokenResponse,
     LoginRequest,
     RefreshRequest,
     SignupRequest,
@@ -39,7 +38,7 @@ async def _issue_token_pair(db: DbSession, user: UserRow) -> TokenPair:
         )
     )
     await db.commit()
-    return TokenPair(access_token=access, refresh_token=refresh_raw)
+    return TokenPair(accessToken=access, refreshToken=refresh_raw)
 
 
 @router.post(
@@ -71,16 +70,16 @@ async def login(payload: LoginRequest, db: DbSession) -> TokenPair:
     return await _issue_token_pair(db, user)
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
-async def refresh(payload: RefreshRequest, db: DbSession) -> AccessTokenResponse:
+@router.post("/refresh", response_model=TokenPair)
+async def refresh(payload: RefreshRequest, db: DbSession) -> TokenPair:
     try:
-        claims = decode_token(payload.refresh_token, expected_type="refresh")
+        claims = decode_token(payload.refreshToken, expected_type="refresh")
     except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         ) from exc
 
-    token_hash = hash_token(payload.refresh_token)
+    token_hash = hash_token(payload.refreshToken)
     result = await db.execute(
         select(RefreshTokenRow).where(RefreshTokenRow.token_hash == token_hash)
     )
@@ -98,7 +97,9 @@ async def refresh(payload: RefreshRequest, db: DbSession) -> AccessTokenResponse
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token subject mismatch"
         )
-    return AccessTokenResponse(access_token=create_access_token(user.id, user.email))
+    # Rotate: revoke the consumed refresh token, then issue a new pair.
+    row.revoked_at = now
+    return await _issue_token_pair(db, user)
 
 
 @router.delete("/logout", status_code=status.HTTP_204_NO_CONTENT)

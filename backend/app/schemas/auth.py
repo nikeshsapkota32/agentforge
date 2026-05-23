@@ -17,18 +17,13 @@ class LoginRequest(BaseModel):
 
 
 class TokenPair(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+    accessToken: str
+    refreshToken: str
+    tokenType: str = "bearer"
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class AccessTokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    refreshToken: str
 
 
 class UserOut(ORMModel):
