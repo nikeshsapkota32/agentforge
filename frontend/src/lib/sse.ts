@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { env } from "./env";
-import { getAccessToken } from "./auth";
-import type { SSEEvent } from "./types";
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  saveTokens,
+} from "./auth";
+import type { AuthTokens, SSEEvent } from "./types";
 
 export interface ResearchStreamState {
   events: SSEEvent[];
@@ -20,6 +25,43 @@ const INITIAL: ResearchStreamState = {
   status: "idle",
 };
 
+async function tryRefresh(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch(`${env.apiUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as AuthTokens;
+    saveTokens(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function openResearchStream(
+  query: string,
+  sessionId: string | undefined,
+  signal: AbortSignal,
+): Promise<Response> {
+  const token = getAccessToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(`${env.apiUrl}/api/v1/research`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query, session_id: sessionId }),
+    signal,
+  });
+}
+
 export function useResearchStream() {
   const [state, setState] = useState<ResearchStreamState>(INITIAL);
   const controllerRef = useRef<AbortController | null>(null);
@@ -32,17 +74,22 @@ export function useResearchStream() {
     setState({ ...INITIAL, status: "streaming" });
 
     try {
-      const token = getAccessToken();
-      const res = await fetch(`${env.apiUrl}/api/v1/research`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ query, session_id: sessionId }),
-        signal: controller.signal,
-      });
+      let res = await openResearchStream(query, sessionId, controller.signal);
+
+      // If the access token is stale, transparently refresh and retry once.
+      if (res.status === 401 && (await tryRefresh())) {
+        res = await openResearchStream(query, sessionId, controller.signal);
+      }
+
+      if (res.status === 401) {
+        clearTokens();
+        setState((s) => ({
+          ...s,
+          status: "error",
+          error: "Session expired. Please sign in again.",
+        }));
+        return;
+      }
 
       if (!res.ok || !res.body) {
         setState((s) => ({ ...s, status: "error", error: `HTTP ${res.status}` }));
