@@ -37,12 +37,18 @@ class Settings(BaseSettings):
     refresh_token_ttl_seconds: int = 60 * 60 * 24 * 7
 
     # LLM provider — OpenAI-compatible.
-    # Free: Groq (Llama 3.3 70B) at https://api.groq.com/openai/v1
-    # Paid: OpenAI default
-    llm_provider: str = "openai"  # "openai" | "groq" | "custom"
-    llm_base_url: str = ""  # blank = SDK default; set for Groq/custom
+    # Free options:
+    #   openrouter  -> https://openrouter.ai/api/v1  (Llama 3.3 70B :free)
+    #   groq        -> https://api.groq.com/openai/v1
+    #   cerebras    -> https://api.cerebras.ai/v1
+    #   gemini      -> https://generativelanguage.googleapis.com/v1beta/openai/
+    # Paid: openai (default)
+    llm_provider: str = "openai"
+    llm_base_url: str = ""  # blank = use provider preset
     llm_api_key: str = ""  # if blank, falls back to openai_api_key
     llm_model: str = ""  # if blank, picked from provider preset
+    openrouter_referer: str = "https://github.com/nikeshsapkota32/agentforge"
+    openrouter_title: str = "AgentForge"
 
     # Legacy / fallback (kept so existing .env files keep working)
     openai_api_key: str = ""
@@ -80,17 +86,33 @@ class Settings(BaseSettings):
     def resolved_llm_base_url(self) -> str | None:
         if self.llm_base_url:
             return self.llm_base_url
-        if self.llm_provider == "groq":
-            return "https://api.groq.com/openai/v1"
-        return None
+        return {
+            "openrouter": "https://openrouter.ai/api/v1",
+            "groq": "https://api.groq.com/openai/v1",
+            "cerebras": "https://api.cerebras.ai/v1",
+            "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        }.get(self.llm_provider)
+
+    @property
+    def llm_default_headers(self) -> dict[str, str]:
+        if self.llm_provider == "openrouter":
+            return {
+                "HTTP-Referer": self.openrouter_referer,
+                "X-Title": self.openrouter_title,
+            }
+        return {}
 
     @property
     def resolved_llm_model(self) -> str:
         if self.llm_model:
             return self.llm_model
-        if self.llm_provider == "groq":
-            return "llama-3.3-70b-versatile"
-        return self.openai_model
+        return {
+            "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
+            "groq": "llama-3.3-70b-versatile",
+            "cerebras": "llama-3.3-70b",
+            "gemini": "gemini-2.0-flash",
+            "openai": self.openai_model,
+        }.get(self.llm_provider, self.openai_model)
 
     @property
     def resolved_embeddings_api_key(self) -> str:

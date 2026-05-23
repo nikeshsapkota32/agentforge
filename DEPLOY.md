@@ -4,7 +4,7 @@ This deploys AgentForge to the public internet at **zero recurring cost** and **
 
 | Layer | Provider | Free tier (May 2026) |
 |---|---|---|
-| LLM | **Groq** (Llama 3.3 70B) | Generous RPM / RPD limit, no credit card |
+| LLM | **OpenRouter** (Llama 3.3 70B :free) | Free `:free`-tagged models, accepts gmail/Google/GitHub login |
 | Postgres | **Neon** | 0.5 GB storage, autoscaling compute |
 | Redis | **Upstash** | 10,000 commands/day |
 | Backend | **Render** (Web Service) | 750 hrs/month, sleeps after 15 min idle |
@@ -31,13 +31,19 @@ Keep both files handy — you'll paste their contents into Render in step 5.
 
 ---
 
-## 1 · Groq (free LLM)
+## 1 · OpenRouter (free LLM)
 
-1. Sign up at <https://console.groq.com>.
-2. Create an API key. Copy it. Format: `gsk_...`.
-3. Verify the free model is available: **`llama-3.3-70b-versatile`**.
+1. Sign up at <https://openrouter.ai>. **Use "Continue with Google"** — no org-email gate, gmail accepted.
+2. **Keys → Create Key**. Copy it. Format: `sk-or-v1-...`.
+3. Pick a free model from the catalog at <https://openrouter.ai/models?max_price=0>. Recommended:
+   - `meta-llama/llama-3.3-70b-instruct:free` — solid general model (this is the default in `render.yaml`)
+   - `deepseek/deepseek-chat-v3-0324:free` — stronger reasoning, slower
+   - `qwen/qwen-2.5-72b-instruct:free` — good fallback
 
-No credit card. No monthly cap on the key, just per-minute RPM caps.
+No credit card. Each `:free` model has independent rate limits (typically 20 req/min, 200 req/day per model). If you hit a limit, swap `LLM_MODEL` to a different `:free` slug and redeploy.
+
+### Why OpenRouter over Groq
+Groq's signup sometimes demands a corporate domain. OpenRouter only needs a Google account. Same OpenAI-compatible API, no code change needed — just `LLM_PROVIDER=openrouter`.
 
 ---
 
@@ -86,7 +92,7 @@ The repo already ships a `render.yaml` Blueprint, so Render builds the backend D
    |---|---|
    | `DATABASE_URL` | the Neon URL from step 2 |
    | `REDIS_URL` | the Upstash URL from step 3 |
-   | `LLM_API_KEY` | your Groq key from step 1 |
+   | `LLM_API_KEY` | your OpenRouter key from step 1 (`sk-or-v1-...`) |
    | `JWT_PRIVATE_KEY` | paste full contents of `keys/jwt_private.pem` (newlines as `\n` or use Render's multi-line editor) |
    | `JWT_PUBLIC_KEY` | paste full contents of `keys/jwt_public.pem` |
    | `CORS_ORIGINS` | `["https://<your-vercel-app>.vercel.app"]` — leave a placeholder for now, update after step 5 |
@@ -140,7 +146,7 @@ If the first request is slow, Render is waking up — subsequent requests are in
 
 **`alembic.util.exc.CommandError`.** Your `DATABASE_URL` is the wrong dialect. Must start with `postgresql+asyncpg://`, not `postgresql://`. Must use `ssl=require`, not `sslmode=require`.
 
-**LLM returns garbage / 401.** Groq's free tier may rate-limit. Check Render logs for `429` on the upstream call. Wait a minute and retry.
+**LLM returns garbage / 401.** OpenRouter's `:free` models rate-limit per-model. Check Render logs for `429` on the upstream call. Either wait a minute or swap `LLM_MODEL` to another `:free` slug (e.g. `deepseek/deepseek-chat-v3-0324:free`) and trigger a redeploy.
 
 **`vector memory disabled` in tool output.** Expected on the free stack. Pinecone is optional; the agents work without it.
 
@@ -151,7 +157,10 @@ If the first request is slow, Render is waking up — subsequent requests are in
 | Want | Pay | How |
 |---|---|---|
 | Always-on backend | $7/mo | Render Starter plan |
-| OpenAI GPT-4o instead of Groq | usage | Set `LLM_PROVIDER=openai` + `LLM_API_KEY=sk-...` + `LLM_MODEL=gpt-4o` |
+| OpenAI GPT-4o instead of OpenRouter | usage | Set `LLM_PROVIDER=openai` + `LLM_API_KEY=sk-...` + `LLM_MODEL=gpt-4o` |
+| Groq's blazing-fast inference | $0 | Set `LLM_PROVIDER=groq` + `LLM_API_KEY=gsk_...` + `LLM_MODEL=llama-3.3-70b-versatile` |
+| Cerebras (fastest free Llama) | $0 | Set `LLM_PROVIDER=cerebras` + `LLM_API_KEY=...` + `LLM_MODEL=llama-3.3-70b` |
+| Gemini 2.0 Flash | $0 | Set `LLM_PROVIDER=gemini` + `LLM_API_KEY=...` + `LLM_MODEL=gemini-2.0-flash` |
 | Working memory | usage | Set `OPENAI_API_KEY` (or `EMBEDDINGS_API_KEY`) + `PINECONE_API_KEY` |
 | Real web search | $0 | SerpAPI free tier 100 req/mo: set `SERPAPI_API_KEY` |
 | LangSmith traces | $0 | Free hobby project: set `LANGSMITH_TRACING=true` + `LANGSMITH_API_KEY=...` |

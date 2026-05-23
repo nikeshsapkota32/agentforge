@@ -1,7 +1,7 @@
 # Render blueprint — provisions the backend as a free-tier web service.
-# Database (Neon), Redis (Upstash), and LLM (Groq) live outside Render on
-# their own free tiers. Set the URL + key env vars in the Render dashboard
-# after the first deploy.
+# Database (Neon), Redis (Upstash), and LLM (OpenRouter) live outside
+# Render on their own free tiers. Set the URL + key env vars in the
+# Render dashboard after the first deploy.
 #
 # Deploy: connect this repo to Render, choose "New Blueprint", point at this
 # file, then fill in the env vars marked `sync: false` below.
@@ -36,13 +36,14 @@ services:
       - key: REDIS_URL
         sync: false
 
-      # LLM — Groq is free with Llama 3.3 70B.
+      # LLM — OpenRouter free tier (Llama 3.3 70B :free, DeepSeek :free, ...).
+      # Sign up at https://openrouter.ai with Google/GitHub/email.
       - key: LLM_PROVIDER
-        value: groq
+        value: openrouter
       - key: LLM_API_KEY
         sync: false
       - key: LLM_MODEL
-        value: llama-3.3-70b-versatile
+        value: meta-llama/llama-3.3-70b-instruct:free
 
       # Embeddings — disable when not paying for OpenAI.
       # Vector tools will return {disabled: ...} instead of failing.

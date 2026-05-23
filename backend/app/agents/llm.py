@@ -28,6 +28,9 @@ def chat_model(temperature: float = 0.2) -> ChatOpenAI:
     base_url = settings.resolved_llm_base_url
     if base_url:
         kwargs["base_url"] = base_url
+    headers = settings.llm_default_headers
+    if headers:
+        kwargs["default_headers"] = headers
     return ChatOpenAI(**kwargs)
 
 
