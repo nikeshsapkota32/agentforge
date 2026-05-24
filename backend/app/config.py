@@ -75,12 +75,16 @@ class Settings(BaseSettings):
     min_passing_score: int = 7
 
     # Comma-separated free-tier OpenRouter model slugs to try in order
-    # if the primary LLM_MODEL returns 429.
+    # if the primary LLM_MODEL returns 429 / 404.
+    # Verified live on https://openrouter.ai/api/v1/models with price=0.
     llm_fallback_models: str = (
-        "deepseek/deepseek-chat-v3-0324:free,"
-        "qwen/qwen-2.5-72b-instruct:free,"
-        "google/gemini-2.0-flash-exp:free,"
-        "mistralai/mistral-small-3.1-24b-instruct:free"
+        "nousresearch/hermes-3-llama-3.1-405b:free,"
+        "nvidia/nemotron-3-super-120b-a12b:free,"
+        "qwen/qwen3-next-80b-a3b-instruct:free,"
+        "deepseek/deepseek-v4-flash:free,"
+        "openai/gpt-oss-120b:free,"
+        "z-ai/glm-4.5-air:free,"
+        "meta-llama/llama-3.3-70b-instruct:free"
     )
 
     @property
@@ -120,7 +124,7 @@ class Settings(BaseSettings):
         if self.llm_model:
             return self.llm_model
         return {
-            "openrouter": "meta-llama/llama-3.3-70b-instruct:free",
+            "openrouter": "nousresearch/hermes-3-llama-3.1-405b:free",
             "groq": "llama-3.3-70b-versatile",
             "cerebras": "llama-3.3-70b",
             "gemini": "gemini-2.0-flash",

@@ -35,9 +35,24 @@ def chat_model(temperature: float = 0.2, model: str | None = None) -> ChatOpenAI
     return ChatOpenAI(**kwargs)
 
 
-def _is_rate_limit(err: BaseException) -> bool:
+def _is_retryable(err: BaseException) -> bool:
+    """Worth trying the next fallback model for: rate-limits, model-missing, gateway errors."""
     msg = str(err).lower()
-    return "429" in msg or "rate" in msg or "rate_limit" in msg or "rate-limit" in msg
+    needles = (
+        "429",
+        "rate",
+        "rate_limit",
+        "rate-limit",
+        "404",
+        "no endpoints found",
+        "not found",
+        "model_not_found",
+        "502",
+        "503",
+        "504",
+        "timed out",
+    )
+    return any(n in msg for n in needles)
 
 
 async def _invoke_once(
@@ -93,11 +108,11 @@ async def call_json(
             return parsed, tokens_in, tokens_out
         except BaseException as err:
             last_err = err
-            if not _is_rate_limit(err):
+            if not _is_retryable(err):
                 raise
-            log.warning("llm 429 on %s; trying next fallback", model)
+            log.warning("llm error on %s (%s); trying next fallback", model, type(err).__name__)
             await asyncio.sleep(min(2 + i, 6))
 
     raise RuntimeError(
-        f"All LLM candidates rate-limited. Tried: {candidates}. Last error: {last_err}"
+        f"All LLM candidates failed. Tried: {candidates}. Last error: {last_err}"
     )
